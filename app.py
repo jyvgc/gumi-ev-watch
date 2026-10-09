@@ -41,90 +41,124 @@ load_stations()
 
 PAGE = """<!DOCTYPE html>
 <html lang="ko"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EV 충전소 알림</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#F2F2F7">
+<title>충전소</title>
 <style>
-*{box-sizing:border-box} body{font-family:-apple-system,'Malgun Gothic',sans-serif;
-background:#0f172a;color:#fff;margin:0 auto;padding:20px;max-width:560px}
-h1{font-size:22px;margin:6px 0 2px} .sub{color:#94a3b8;font-size:13px;margin-bottom:16px}
-.card{background:#1e293b;border-radius:16px;padding:18px;margin-bottom:14px}
-.row{display:flex;gap:8px} input{flex:1;border:0;border-radius:12px;padding:14px;font-size:16px}
-button{border:0;border-radius:12px;padding:14px 18px;font-size:16px;font-weight:800;cursor:pointer}
-.btn{background:#38bdf8;color:#082f49}
-.st{border-top:1px solid #334155;padding:12px 0}
-.st:first-child{border-top:0}
-.nm{font-size:17px;font-weight:700} .ad{color:#94a3b8;font-size:12px;margin:2px 0 8px}
-.chips{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
-.chip{font-size:13px;padding:4px 10px;border-radius:999px;font-weight:700}
-.free{background:#14532d;color:#4ade80}.busy{background:#7f1d1d;color:#fca5a5}
-.tgl{display:flex;gap:8px;margin-top:8px}
-.tgl button{flex:1;padding:12px 0}
-.on{background:#22c55e;color:#06240f}.off{background:#334155;color:#fff}.dim{opacity:.35}
-.del{background:transparent;color:#f87171;font-size:13px;padding:6px 0}
-.rs{padding:10px 0;border-top:1px solid #334155;font-size:15px}
-#msg{text-align:center;min-height:22px;color:#fde68a;font-size:14px;margin-top:8px}
-.meta{color:#94a3b8;font-size:12px;margin-top:8px}
-a{color:#7dd3fc;font-size:13px}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Apple SD Gothic Neo','Malgun Gothic',sans-serif;background:#F2F2F7;color:#1C1C1E;margin:0 auto;max-width:560px;padding:18px 18px 110px}
+.date{font-size:13px;font-weight:600;color:#8E8E93;margin-top:8px}
+h1{font-size:34px;font-weight:800;margin:2px 0 16px;letter-spacing:-.5px}
+.hero{border-radius:24px;color:#fff;padding:22px 22px 0;margin-bottom:26px;overflow:hidden;box-shadow:0 10px 28px rgba(0,0,0,.14);background:linear-gradient(135deg,#34C759,#0A9E88)}
+.hero.none{background:linear-gradient(135deg,#8E8E93,#636366)}
+.hero .lb{font-size:12px;font-weight:700;opacity:.85;letter-spacing:.5px}
+.hero .tt{font-size:30px;font-weight:800;margin:6px 0 2px;line-height:1.15}
+.hero .ss{font-size:16px;opacity:.92;margin-bottom:60px}
+.hero .bar{margin:0 -22px;padding:14px 22px;background:rgba(255,255,255,.22);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);display:flex;align-items:center;gap:12px}
+.hero .ic{width:42px;height:42px;border-radius:10px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:22px}
+.hero .bt{flex:1;font-size:14px;font-weight:600;line-height:1.3}
+.pill{border:0;border-radius:999px;padding:9px 20px;font-size:15px;font-weight:800;cursor:pointer;background:#fff;color:#007AFF}
+.pill.off{background:#E5E5EA;color:#636366}.pill.on{background:#E3F0FF;color:#007AFF}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:0 4px 10px}
+.sec b{font-size:22px;font-weight:800}.sec a{color:#007AFF;font-size:16px;text-decoration:none}
+.group{background:#fff;border-radius:20px;padding:4px 16px;margin-bottom:22px;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.item{padding:14px 0;border-top:1px solid #E5E5EA}.item:first-child{border-top:0}
+.top{display:flex;align-items:center;gap:13px}
+.icon{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,#0A84FF,#5E5CE6);color:#fff;font-size:28px;display:flex;align-items:center;justify-content:center;flex:none}
+.icon.g{background:linear-gradient(135deg,#34C759,#0A9E88)}
+.info{flex:1;min-width:0}.nm{font-size:17px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ad{font-size:13px;color:#8E8E93;margin-top:2px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 0 69px}
+.chip{font-size:13px;font-weight:700;padding:5px 11px;border-radius:999px}
+.free{background:#DFF7E5;color:#1E8E3E}.busy{background:#FFE9D9;color:#C2410C}.etc{background:#E5E5EA;color:#636366}
+.del{background:none;border:0;color:#FF3B30;font-size:13px;margin:6px 0 0 69px;padding:4px 0;cursor:pointer}
+.search{display:flex;gap:8px;margin-bottom:10px}
+.search input{flex:1;border:0;border-radius:14px;background:#E3E3E8;padding:14px 16px;font-size:17px;outline:none}
+.search button{border:0;border-radius:14px;background:#007AFF;color:#fff;font-size:16px;font-weight:700;padding:0 20px;cursor:pointer}
+#msg{color:#8E8E93;font-size:14px;min-height:20px;margin:0 4px 10px}
+.big{display:block;width:100%;border:0;border-radius:16px;background:#fff;color:#007AFF;font-size:17px;font-weight:700;padding:16px;margin-bottom:12px;cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.05)}
+.empty{padding:22px 0;text-align:center;color:#8E8E93}
+.meta{color:#FF3B30;font-size:12px;margin:0 4px}
+.tabs{position:fixed;left:0;right:0;bottom:0;display:flex;justify-content:center;background:rgba(249,249,249,.85);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid rgba(0,0,0,.1);padding:8px 0 calc(8px + env(safe-area-inset-bottom))}
+.tabs div{width:560px;max-width:100%;display:flex}
+.tab{flex:1;text-align:center;font-size:11px;font-weight:600;color:#8E8E93;cursor:pointer}
+.tab span{display:block;font-size:24px;margin-bottom:1px}.tab.act{color:#007AFF}
+.page{display:none}.page.act{display:block}
 </style></head><body>
-<h1>🔌 EV 충전소 알림</h1>
-<div class="sub">이름으로 검색 → 등록 → 각각 켜기/끄기 · 2분마다 감시</div>
-<div class="card"><b>➕ 충전소 추가</b>
-<div class="row" style="margin-top:10px">
-<input id="q" placeholder="예: 구미시청, 옥계, 인동" onkeydown="if(event.key==='Enter')search()">
-<button class="btn" onclick="search()">검색</button>
-</div><div id="msg"></div><div id="results"></div>
+<div id="p0" class="page act">
+ <div class="date" id="date"></div><h1>충전소</h1>
+ <div id="hero"></div>
+ <div class="sec"><b>감시 목록</b><a href="#" onclick="refresh();return false">새로고침</a></div>
+ <div class="group" id="list"></div>
+ <div class="meta" id="meta"></div>
 </div>
-<div class="card"><b>📋 감시 목록</b> <a href="#" onclick="refresh();return false" style="float:right">🔄 새로고침</a>
-<div id="list"></div>
-<div class="meta" id="meta"></div>
-<div style="margin-top:10px"><a href="/test">🔔 테스트 알림 보내기</a></div>
+<div id="p1" class="page">
+ <h1 style="margin-top:14px">검색</h1>
+ <div class="search"><input id="q" placeholder="충전소 검색 (예: 구미시청, 옥계, 인동)" onkeydown="if(event.key==='Enter')search()"><button onclick="search()">검색</button></div>
+ <div id="msg"></div><div class="group" id="results" style="display:none"></div>
 </div>
+<div id="p2" class="page">
+ <h1 style="margin-top:14px">설정</h1>
+ <button class="big" onclick="testNoti()">🔔 테스트 알림 보내기</button>
+ <div id="tmsg" class="meta" style="color:#8E8E93"></div>
+ <div class="ad" style="margin:14px 4px">2분마다 충전소 상태를 확인하고, 빈자리가 생기면 텔레그램으로 알려드립니다.</div>
+</div>
+<div class="tabs"><div>
+ <div class="tab act" onclick="tab(0)"><span>⚡</span>오늘</div>
+ <div class="tab" onclick="tab(1)"><span>🔍</span>검색</div>
+ <div class="tab" onclick="tab(2)"><span>⚙️</span>설정</div>
+</div></div>
 <script>
+const $=id=>document.getElementById(id);
+function tab(n){document.querySelectorAll('.page').forEach((p,i)=>p.classList.toggle('act',i==n));
+ document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('act',i==n));window.scrollTo(0,0)}
+$('date').textContent=new Date().toLocaleDateString('ko-KR',{month:'long',day:'numeric',weekday:'long'});
 async function search(){
- const q=document.getElementById('q').value.trim();
- if(!q){document.getElementById('msg').textContent='충전소 이름을 입력하세요';return}
- document.getElementById('msg').textContent='검색중…';
+ const q=$('q').value.trim();
+ if(!q){$('msg').textContent='충전소 이름을 입력하세요';return}
+ $('msg').textContent='검색중…';
  const r=await fetch('/api/search?q='+encodeURIComponent(q)); const j=await r.json();
- document.getElementById('msg').textContent=j.stations?`검색 결과 ${j.stations.length}곳`:(j.error||'검색 실패');
+ $('msg').textContent=j.stations?`검색 결과 ${j.stations.length}곳`:(j.error||'검색 실패');
  let h='';
  (j.stations||[]).forEach(s=>{
-  h+=`<div class="rs"><b>${s.statNm}</b><div style="color:#94a3b8;font-size:12px">${s.addr||''} · 충전기 ${s.count}대</div>
-  <button class="btn" style="margin-top:6px;padding:10px 16px" onclick="addSt('${s.statId}','${s.statNm.replace(/'/g,'')}')">+ 등록</button></div>`;});
- document.getElementById('results').innerHTML=h;
+  h+=`<div class="item"><div class="top"><div class="icon">⚡</div><div class="info"><div class="nm">${s.statNm}</div><div class="ad">${s.addr||''} · 충전기 ${s.count}대</div></div>
+  <button class="pill on" onclick="addSt('${s.statId}','${(s.statNm||'').replace(/'/g,'')}')">등록</button></div></div>`;});
+ $('results').innerHTML=h;$('results').style.display=h?'block':'none';
 }
 async function addSt(id,nm){
- const r=await fetch('/api/add',{method:'POST',headers:{'Content-Type':'application/json'},
-  body:JSON.stringify({statId:id})});
+ const r=await fetch('/api/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({statId:id})});
  const j=await r.json();
- document.getElementById('msg').textContent=j.ok?`✅ ${nm} 등록됨`:(j.error||'등록 실패');
+ $('msg').textContent=j.ok?`✅ ${nm} 등록됨`:(j.error||'등록 실패');
  refresh();
 }
-async function setWatch(id,a){
- await fetch(`/api/watch/${id}/${a}`);
- refresh();
-}
-async function delSt(id){
- if(!confirm('이 충전소를 목록에서 삭제할까요?'))return;
- await fetch(`/api/remove/${id}`,{method:'POST'});
- refresh();
-}
+async function setWatch(id,a){await fetch(`/api/watch/${id}/${a}`);refresh()}
+async function delSt(id){if(!confirm('이 충전소를 목록에서 삭제할까요?'))return;
+ await fetch(`/api/remove/${id}`,{method:'POST'});refresh()}
+async function testNoti(){$('tmsg').textContent='전송중…';
+ try{const j=await (await fetch('/test')).json();$('tmsg').textContent=j.sent?'✅ 텔레그램으로 전송했습니다':'전송 실패'}catch(e){$('tmsg').textContent='전송 실패'}}
 async function refresh(){
  const r=await fetch('/api/state'); const j=await r.json();
- let h='';
- (j.stations||[]).forEach(s=>{
-  let chips='';
-  (s.chargers||[]).forEach(c=>{
-   const f=c.stat=='2';
-   chips+=`<span class="chip ${f?'free':'busy'}">${c.chgerId}번 ${f?'빈자리':'충전중'}</span>`;});
-  h+=`<div class="st"><div class="nm">${s.watching?'🟢':'🔴'} ${s.statNm}</div>
-  <div class="ad">${s.addr||''} · 마지막 확인 ${s.last_check||'-'}</div>
-  <div class="chips">${chips||'상태 정보 없음'}</div>
-  <div class="tgl">
-  <button class="${s.watching?'on':'on dim'}" onclick="setWatch('${s.statId}','on')">켜기</button>
-  <button class="${s.watching?'off dim':'off'}" onclick="setWatch('${s.statId}','off')">끄기</button>
-  </div><button class="del" onclick="delSt('${s.statId}')">삭제</button></div>`;});
- document.getElementById('list').innerHTML=h||'등록된 충전소가 없습니다';
- document.getElementById('meta').textContent=j.last_error?('오류: '+j.last_error):'';
+ const sts=j.stations||[]; let h='';
+ sts.forEach(s=>{
+  let chips=''; const ch=s.chargers||[];
+  ch.forEach(c=>{const f=c.stat=='2',b=c.stat=='3';
+   chips+=`<span class="chip ${f?'free':b?'busy':'etc'}">${c.chgerId}번 ${f?'충전가능':b?'충전중':c.stat_text}</span>`});
+  const free=ch.filter(c=>c.stat=='2').length;
+  h+=`<div class="item"><div class="top"><div class="icon ${free?'g':''}">⚡</div>
+  <div class="info"><div class="nm">${s.statNm}</div><div class="ad">${s.addr||''} · 확인 ${(s.last_check||'-').slice(11,16)||'-'}</div></div>
+  <button class="pill ${s.watching?'on':'off'}" onclick="setWatch('${s.statId}','${s.watching?'off':'on'}')">${s.watching?'켜짐':'꺼짐'}</button></div>
+  <div class="chips">${chips||'<span class="chip etc">상태 정보 없음</span>'}</div>
+  <button class="del" onclick="delSt('${s.statId}')">삭제</button></div>`;});
+ $('list').innerHTML=h||'<div class="empty">등록된 충전소가 없습니다<br>검색 탭에서 추가하세요</div>';
+ const m=sts.find(s=>s.watching)||sts[0];
+ if(m){const ch=m.chargers||[];const free=ch.filter(c=>c.stat=='2').length;
+  $('hero').innerHTML=`<div class="hero ${free?'':'none'}"><div class="lb">${free?'지금 빈자리':'현재 만차'}</div>
+  <div class="tt">${m.statNm}</div><div class="ss">빈자리 ${free}대 · 전체 ${ch.length}대</div>
+  <div class="bar"><div class="ic">⚡</div><div class="bt">${m.watching?'2분마다 감시 중':'감시 꺼짐'}</div>
+  <button class="pill" onclick="setWatch('${m.statId}','${m.watching?'off':'on'}')">${m.watching?'알림 켜짐':'알림 꺼짐'}</button></div></div>`;
+ }else $('hero').innerHTML='';
+ $('meta').textContent=j.last_error?('오류: '+j.last_error):'';
 }
 refresh(); setInterval(refresh,30000);
 </script></body></html>"""
