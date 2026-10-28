@@ -17,6 +17,14 @@ stations = {}      # statId -> {statNm, addr, watching}
 last_state = {}    # statId -> {chgerId: stat}
 last_check = {}    # statId -> str
 last_error = None
+fail_count = 0      # 연속 실패 횟수 (3회 이상일 때만 화면에 오류 표시)
+charger_cache = {}  # statId -> 마지막 성공 조회 결과
+
+def fill_addr(sid, items):
+    st = stations.get(sid)
+    if st and items and not st.get("addr"):
+        st["addr"] = items[0].get("addr", "")
+        save_stations()
 
 def save_stations():
     try:
@@ -174,7 +182,15 @@ def api_call(params):
     p = {"serviceKey": SERVICE_KEY, "pageNo": "1", "dataType": "JSON"}
     p.update(params)
     url = base + "?" + urllib.parse.urlencode(p)
-    raw = urllib.request.urlopen(url, timeout=30).read().decode("utf-8", errors="ignore")
+    raw = None
+    for attempt in range(3):          # 일시적 지연 시 최대 3회 재시도
+        try:
+            raw = urllib.request.urlopen(url, timeout=20).read().decode("utf-8", errors="ignore")
+            break
+        except Exception:
+            if attempt == 2:
+                raise
+            time.sleep(3)
     d = json.loads(raw)
     items = d.get("items", {}).get("item", [])
     if isinstance(items, dict):
@@ -213,7 +229,7 @@ def search_stations(keyword):
     return list(grouped.values())[:20]
 
 def watcher():
-    global last_state, last_check, last_error
+    global last_state, last_check, last_error, fail_count
     print(f"watcher start, every {CHECK_INTERVAL}s", flush=True)
     first = {}
     while True:
@@ -227,6 +243,8 @@ def watcher():
                 cur = {it.get("chgerId"): str(it.get("stat")) for it in items}
                 last_check[sid] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 last_error = None
+                fail_count = 0
+                fill_addr(sid, items)
                 if sid not in first:
                     first[sid] = True
                 if first[sid]:
@@ -250,6 +268,7 @@ def watcher():
                                 send_telegram(f"⚠️ {st.get('statNm')} 만차됨\n{cid}번 충전 시작 ({last_check[sid]})")
                     last_state[sid] = cur
         except Exception as e:
+            fail_count += 1
             last_error = str(e)[:300]
             print("watch error:", e, flush=True)
         time.sleep(CHECK_INTERVAL)
@@ -314,6 +333,7 @@ def api_remove(sid):
 
 @app.route("/api/state")
 def api_state():
+    global last_error, fail_count
     out = []
     for sid, st in stations.items():
         chargers = []
@@ -323,13 +343,19 @@ def api_state():
                 chargers = [{"chgerId": it.get("chgerId"), "stat": str(it.get("stat")),
                              "stat_text": STAT_TEXT.get(str(it.get("stat")), "?")}
                             for it in sorted(items, key=lambda x: x.get("chgerId", ""))]
+            charger_cache[sid] = chargers
+            fail_count = 0
+            last_error = None
+            if chargers:
+                fill_addr(sid, items)
         except Exception as e:
-            global last_error
+            fail_count += 1
             last_error = str(e)[:300]
+            chargers = charger_cache.get(sid, [])   # 실패 시 직전 성공값 표시
         out.append({"statId": sid, "statNm": st.get("statNm"),
                     "addr": st.get("addr"), "watching": st.get("watching"),
                     "last_check": last_check.get(sid), "chargers": chargers})
-    return jsonify({"ok": True, "stations": out, "last_error": last_error})
+    return jsonify({"ok": True, "stations": out, "last_error": last_error if fail_count >= 3 else None})
 
 # 하위호환: 예전 단일 URL
 @app.route("/status")
