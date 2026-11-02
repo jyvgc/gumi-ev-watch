@@ -8,6 +8,10 @@ TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 DEFAULT_STAT_ID = os.environ.get("STAT_ID", "PI645280")
 CHECK_INTERVAL = int(os.environ.get("CHECK_INTERVAL", "120"))
 DATA_FILE = os.path.join(os.path.dirname(__file__), "stations.json")
+# Firebase Realtime Database (설정 영구 저장용, 선택)
+FB_URL = os.environ.get("FIREBASE_DB_URL", "").strip().rstrip("/")
+FB_SECRET = os.environ.get("FIREBASE_DB_SECRET", "").strip()
+FB_PATH = os.environ.get("FIREBASE_PATH", "evwatch_gumi")
 
 STAT_TEXT = {"1": "통신이상", "2": "충전가능", "3": "충전중",
              "4": "운영중지", "5": "점검중", "9": "상태미확인"}
@@ -26,15 +30,56 @@ def fill_addr(sid, items):
         st["addr"] = items[0].get("addr", "")
         save_stations()
 
+def _fb_url():
+    u = f"{FB_URL}/{FB_PATH}/stations.json"
+    if FB_SECRET:
+        u += "?auth=" + urllib.parse.quote(FB_SECRET)
+    return u
+
+def fb_load():
+    """Firebase에서 설정 읽기. 성공 시 dict(없으면 None 아닌 빈 dict), 실패 시 None"""
+    if not FB_URL:
+        return None
+    try:
+        raw = urllib.request.urlopen(_fb_url(), timeout=15).read().decode("utf-8")
+        d = json.loads(raw)
+        return d if isinstance(d, dict) else {}
+    except Exception as e:
+        print("firebase load error:", e, flush=True)
+        return None
+
+def fb_save():
+    if not FB_URL:
+        return
+    try:
+        body = json.dumps(stations, ensure_ascii=False).encode("utf-8")
+        req = urllib.request.Request(_fb_url(), data=body, method="PUT",
+                                     headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=15).read()
+    except Exception as e:
+        print("firebase save error:", e, flush=True)
+
 def save_stations():
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
             json.dump(stations, f, ensure_ascii=False)
     except Exception as e:
         print("save error:", e)
+    fb_save()
 
 def load_stations():
     global stations
+    fb = fb_load()
+    if fb is not None:
+        if fb:
+            stations = fb
+            print("settings loaded from firebase", flush=True)
+            return
+        # Firebase는 연결됐지만 비어있음 → 최초 1회 기본값으로 시작
+        if DEFAULT_STAT_ID:
+            stations[DEFAULT_STAT_ID] = {"statNm": "구미시 구미대학교", "addr": "", "watching": False}
+            save_stations()
+        return
     try:
         if os.path.exists(DATA_FILE):
             with open(DATA_FILE, encoding="utf-8") as f:
@@ -250,12 +295,13 @@ def watcher():
                 if first[sid]:
                     last_state[sid] = cur
                     first[sid] = False
-                    avail = sum(1 for s in cur.values() if s == "2")
-                    send_telegram(f"🔌 {st.get('statNm')} 감시 시작\n현재 빈자리 {avail}대 / 전체 {len(cur)}대")
+                    print(f"[{sid}] initial state {cur}", flush=True)
                 else:
                     prev = last_state.get(sid, {})
                     for cid, stat in cur.items():
                         p = prev.get(cid)
+                        if p is not None and p != stat:
+                            print(f"[{sid}] {cid}: {p}->{stat} at {last_check[sid]}", flush=True)
                         if p == "3" and stat == "2":
                             avail = sum(1 for s in cur.values() if s == "2")
                             send_telegram(
