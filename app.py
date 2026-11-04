@@ -23,6 +23,31 @@ last_check = {}    # statId -> str
 last_error = None
 fail_count = 0      # 연속 실패 횟수 (3회 이상일 때만 화면에 오류 표시)
 charger_cache = {}  # statId -> 마지막 성공 조회 결과
+cache_time = {}     # statId -> 캐시 시각(epoch)
+CACHE_TTL = 20      # 초: 화면 새로고침 때 이 시간 안이면 공공 API를 다시 부르지 않음
+
+def chargers_from(items):
+    return [{"chgerId": it.get("chgerId"), "stat": str(it.get("stat")),
+             "stat_text": STAT_TEXT.get(str(it.get("stat")), "?")}
+            for it in sorted(items, key=lambda x: x.get("chgerId", ""))]
+
+def notify_enabled(sid):
+    """감시를 켤 때 현재 상태를 텔레그램으로 알림 (백그라운드)"""
+    try:
+        st = stations.get(sid, {})
+        items = fetch_station(sid)
+        ch = chargers_from(items)
+        charger_cache[sid] = ch
+        cache_time[sid] = time.time()
+        free = [c["chgerId"] for c in ch if c["stat"] == "2"]
+        lines = " / ".join(f"{c['chgerId']}번 {c['stat_text']}" for c in ch)
+        head = f"🔔 {st.get('statNm')} 알림 켜짐"
+        if free:
+            send_telegram(f"{head}\n지금 빈자리 {len(free)}대 ({', '.join(free)}번)\n{lines}")
+        else:
+            send_telegram(f"{head}\n지금은 빈자리 없음 (0대)\n{lines}\n자리가 나면 알려드릴게요.")
+    except Exception as e:
+        send_telegram(f"🔔 {stations.get(sid, {}).get('statNm')} 알림 켜짐\n(현재 상태 조회 실패: {str(e)[:60]})")
 
 def fill_addr(sid, items):
     st = stations.get(sid)
@@ -65,7 +90,7 @@ def save_stations():
             json.dump(stations, f, ensure_ascii=False)
     except Exception as e:
         print("save error:", e)
-    fb_save()
+    threading.Thread(target=fb_save, daemon=True).start()
 
 def load_stations():
     global stations
@@ -179,10 +204,17 @@ async function addSt(btn){
  if(j.ok){document.getElementById('results').innerHTML='';document.getElementById('q').value=''}
  refresh();
 }
-async function setWatch(id,on){await fetch('/api/watch/'+id+'/'+(on?'on':'off'));refresh()}
+var lastData=null;
+async function setWatch(id,on){
+ if(lastData){(lastData.stations||[]).forEach(function(s){if(s.statId==id)s.watching=on});render(lastData)}
+ try{await fetch('/api/watch/'+id+'/'+(on?'on':'off'))}catch(e){refresh()}
+}
 async function delSt(id){if(!confirm('이 충전소를 목록에서 삭제할까요?'))return;await fetch('/api/remove/'+id,{method:'POST'});refresh()}
 async function refresh(){
  var j;try{j=await (await fetch('/api/state')).json()}catch(e){return}
+ lastData=j;render(j);
+}
+function render(j){
  var sts=j.stations||[], free=0, watching=0, html='';
  sts.forEach(function(s){
   var f=(s.chargers||[]).filter(function(c){return c.stat=='2'}).length;
@@ -286,23 +318,22 @@ def watcher():
                     continue
                 items = fetch_station(sid)
                 cur = {it.get("chgerId"): str(it.get("stat")) for it in items}
+                charger_cache[sid] = chargers_from(items)
+                cache_time[sid] = time.time()
                 last_check[sid] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 last_error = None
                 fail_count = 0
                 fill_addr(sid, items)
-                if sid not in first:
-                    first[sid] = True
-                if first[sid]:
+                if sid not in last_state:
                     last_state[sid] = cur
-                    first[sid] = False
-                    print(f"[{sid}] initial state {cur}", flush=True)
+                    print(f"[{sid}] baseline {cur}", flush=True)
                 else:
                     prev = last_state.get(sid, {})
                     for cid, stat in cur.items():
                         p = prev.get(cid)
                         if p is not None and p != stat:
                             print(f"[{sid}] {cid}: {p}->{stat} at {last_check[sid]}", flush=True)
-                        if p == "3" and stat == "2":
+                        if p is not None and p != "2" and stat == "2":
                             avail = sum(1 for s in cur.values() if s == "2")
                             send_telegram(
                                 f"🔌 {st.get('statNm')} 빈자리 발생!\n"
@@ -363,8 +394,11 @@ def api_watch(sid, action):
     if sid in stations:
         if action == "on":
             stations[sid]["watching"] = True
+            last_state.pop(sid, None)   # 켤 때 현재 상태를 새 기준으로
+            threading.Thread(target=notify_enabled, args=(sid,), daemon=True).start()
         elif action == "off":
             stations[sid]["watching"] = False
+            last_state.pop(sid, None)
         save_stations()
         return jsonify({"ok": True, "watching": stations[sid]["watching"]})
     return jsonify({"ok": False}), 404
@@ -384,16 +418,18 @@ def api_state():
     for sid, st in stations.items():
         chargers = []
         try:
-            if SERVICE_KEY:
-                items = fetch_station(sid)
-                chargers = [{"chgerId": it.get("chgerId"), "stat": str(it.get("stat")),
-                             "stat_text": STAT_TEXT.get(str(it.get("stat")), "?")}
-                            for it in sorted(items, key=lambda x: x.get("chgerId", ""))]
-            charger_cache[sid] = chargers
-            fail_count = 0
-            last_error = None
-            if chargers:
-                fill_addr(sid, items)
+            if sid in charger_cache and time.time() - cache_time.get(sid, 0) < CACHE_TTL:
+                chargers = charger_cache[sid]          # 방금 조회한 값 재사용 → 빠름
+            else:
+                if SERVICE_KEY:
+                    items = fetch_station(sid)
+                    chargers = chargers_from(items)
+                    if chargers:
+                        fill_addr(sid, items)
+                charger_cache[sid] = chargers
+                cache_time[sid] = time.time()
+                fail_count = 0
+                last_error = None
         except Exception as e:
             fail_count += 1
             last_error = str(e)[:300]
@@ -415,6 +451,7 @@ def watch(action):
             stations[sid]["watching"] = True
         elif action == "off":
             stations[sid]["watching"] = False
+        last_state.pop(sid, None)
     save_stations()
     return jsonify({"watching": action == "on"})
 
