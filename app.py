@@ -36,6 +36,8 @@ def notify_enabled(sid):
     try:
         st = stations.get(sid, {})
         items = fetch_station(sid)
+        if not st.get("watching"):      # 그 사이 껐다면 보내지 않음
+            return
         ch = chargers_from(items)
         charger_cache[sid] = ch
         cache_time[sid] = time.time()
@@ -62,21 +64,26 @@ def _fb_url():
     return u
 
 def fb_load():
-    """Firebase에서 설정 읽기. 성공 시 dict(없으면 None 아닌 빈 dict), 실패 시 None"""
+    """Firebase에서 설정 읽기. 성공 시 dict(없으면 빈 dict), 실패 시 None (3회 재시도)"""
     if not FB_URL:
         return None
-    try:
-        raw = urllib.request.urlopen(_fb_url(), timeout=15).read().decode("utf-8")
-        d = json.loads(raw)
-        return d if isinstance(d, dict) else {}
-    except Exception as e:
-        print("firebase load error:", e, flush=True)
-        return None
+    for i in range(3):
+        try:
+            raw = urllib.request.urlopen(_fb_url(), timeout=15).read().decode("utf-8")
+            d = json.loads(raw)
+            return d if isinstance(d, dict) else {}
+        except Exception as e:
+            print("firebase load error:", e, flush=True)
+            time.sleep(2)
+    return None
+
+_fb_lock = threading.Lock()
 
 def fb_save():
     if not FB_URL:
         return
     try:
+      with _fb_lock:                      # 저장 순서가 뒤섞이지 않게 (항상 최신 값 저장)
         body = json.dumps(stations, ensure_ascii=False).encode("utf-8")
         req = urllib.request.Request(_fb_url(), data=body, method="PUT",
                                      headers={"Content-Type": "application/json"})
@@ -112,7 +119,7 @@ def load_stations():
     except Exception as e:
         print("load error:", e)
     if not stations and DEFAULT_STAT_ID:
-        stations[DEFAULT_STAT_ID] = {"statNm": "구미시 구미대학교", "addr": "", "watching": True}
+        stations[DEFAULT_STAT_ID] = {"statNm": "구미시 구미대학교", "addr": "", "watching": False}
         save_stations()
 
 load_stations()
@@ -317,6 +324,8 @@ def watcher():
                 if not SERVICE_KEY:
                     continue
                 items = fetch_station(sid)
+                if not stations.get(sid, {}).get("watching"):   # 조회 중에 껐다면 알림 안 함
+                    continue
                 cur = {it.get("chgerId"): str(it.get("stat")) for it in items}
                 charger_cache[sid] = chargers_from(items)
                 cache_time[sid] = time.time()
